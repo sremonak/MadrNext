@@ -1,0 +1,202 @@
+@import "tailwindcss";
+
+/*
+ * MadrNext design tokens.
+ *
+ * Direction: scholarly manuscript — deep pine-teal ink, warm paper, and a
+ * single gold accent used sparingly like an illuminated rubric. Structure
+ * comes from thin double rules (manuscript frames), not from card shadows.
+ */
+
+@theme {
+  --color-ink: #0e2a2b;
+  --color-ink-soft: #16393a;
+  --color-teal: #0c5b53;
+  --color-teal-deep: #08463f;
+  --color-teal-bright: #3aa694;
+  --color-gold: #b98a2f;
+  --color-gold-soft: #d9b262;
+  --color-gold-wash: #f4ead4;
+  --color-paper: #f7f5f0;
+  --color-surface: #fffdf8;
+  --color-line: #e3ded2;
+  --color-line-strong: #c9c2b0;
+  --color-body: #21302f;
+  --color-muted: #64716d;
+  --color-danger: #a63b2a;
+  --color-danger-wash: #f7e7e2;
+  --color-success: #2e7d4f;
+  --color-success-wash: #e3f0e7;
+  --color-warn: #9a6a10;
+  --color-warn-wash: #f6ecd7;
+
+  --font-sans: var(--font-hind-siliguri), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-noto-serif-bengali), var(--font-hind-siliguri), serif;
+
+  --shadow-raised: 0 1px 2px rgb(14 42 43 / 0.05), 0 4px 14px rgb(14 42 43 / 0.07);
+  --shadow-sunken: inset 0 1px 2px rgb(14 42 43 / 0.06);
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+}
+
+/* Dark mode — deep water-green surfaces, parchment-tinted text. */
+.dark {
+  --color-ink: #0a1a19;
+  --color-ink-soft: #0f2422;
+  --color-teal: #2f9080;
+  --color-teal-deep: #1c6b5f;
+  --color-teal-bright: #4fc0ac;
+  --color-gold: #d9a441;
+  --color-gold-soft: #e3b866;
+  --color-gold-wash: #2a2415;
+  --color-paper: #0a1a19;
+  --color-surface: #0f2321;
+  --color-line: #1e3733;
+  --color-line-strong: #2c4a45;
+  --color-body: #e6ebe7;
+  --color-muted: #8fa39d;
+  --color-danger: #e07057;
+  --color-danger-wash: #2d1712;
+  --color-success: #6fbe8f;
+  --color-success-wash: #12281b;
+  --color-warn: #d5a23e;
+  --color-warn-wash: #2a2415;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-body);
+  font-family: var(--font-sans);
+  font-size: 15.5px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-gold-soft);
+  color: #1c1403;
+}
+
+/* Visible keyboard focus everywhere */
+:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Manuscript frame: thin double rule used for hero/auth/editorial frames */
+.rule-frame {
+  border: 1px solid var(--color-line-strong);
+  box-shadow: 0 0 0 4px var(--color-paper), 0 0 0 5px var(--color-line);
+}
+
+.rule-frame-tight {
+  border: 1px solid var(--color-line-strong);
+  box-shadow: 0 0 0 3px var(--color-paper), 0 0 0 4px var(--color-line);
+}
+
+/* Display type for Bangla headings */
+.display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+/* Numeric eyebrow — Bengali numerals are set in tabular context */
+.tabnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle one-shot reveal for the hero only */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise {
+  animation: rise 0.7s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+}
+.rise-2 {
+  animation: rise 0.7s 0.12s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+}
+.rise-3 {
+  animation: rise 0.7s 0.24s cubic-bezier(0.2, 0.6, 0.2, 1) both;
+}
+
+/* Video watermark that drifts position on a timer (set via JS custom props) */
+.watermark-drift {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.watermark-drift > span {
+  position: absolute;
+  transform: translate(
+    calc(var(--wm-x, 6%) - 0%),
+    calc(var(--wm-y, 8%) - 0%)
+  );
+  transition: transform 12s ease-in-out;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: rgb(255 255 255 / 0.55);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.6);
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* Loading skeleton */
+@keyframes shimmer {
+  from { background-position: -200px 0; }
+  to { background-position: calc(200px + 100%) 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--color-line) 25%, var(--color-surface) 37%, var(--color-line) 63%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* Thin scrollbars for panels */
+.scroll-slim::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 8px;
+}
+
+/* PDF canvas container */
+.pdf-stage {
+  position: relative;
+  overflow: auto;
+  background: #525659;
+  border-radius: var(--radius-md);
+}

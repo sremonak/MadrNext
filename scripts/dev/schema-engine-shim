@@ -1,0 +1,2 @@
+#!/usr/bin/env node
+require('/home/user/MadrNext/scripts/dev/schema-engine-shim.mjs');

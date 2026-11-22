@@ -1,0 +1,868 @@
+// MadrNext — Database schema
+// PostgreSQL / Prisma. All monetary values are stored as integers in paisa
+// (1 BDT = 100 paisa) to avoid floating point errors.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Identity & access
+// ---------------------------------------------------------------------------
+
+enum Role {
+  STUDENT
+  SUPPORT_AGENT
+  PAYMENT_MANAGER
+  COURSE_MANAGER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+}
+
+model User {
+  id               String     @id @default(uuid())
+  email            String?    @unique
+  phone            String?    @unique
+  name             String
+  passwordHash     String
+  role             Role       @default(STUDENT)
+  status           UserStatus @default(PENDING_VERIFICATION)
+  emailVerifiedAt  DateTime?
+  phoneVerifiedAt  DateTime?
+  mfaSecret        String? // TOTP secret (encrypted at rest by app layer); null = MFA disabled
+  mfaEnabled       Boolean    @default(false)
+  avatarColor      String     @default("teal")
+  locale           String     @default("bn")
+  lastLoginAt      DateTime?
+  suspendedAt      DateTime?
+  suspensionReason String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  studentProfile      StudentProfile?
+  adminProfile        AdminProfile?
+  sessions            Session[]
+  loginHistory        LoginHistory[]
+  passwordResetTokens PasswordResetToken[]
+  verificationCodes   VerificationCode[]
+  enrollments         Enrollment[]
+  payments            Payment[]
+  lessonProgress      LessonProgress[]
+  examAttempts        ExamAttempt[]
+  notifications       Notification[]
+  couponRedemptions   CouponRedemption[]
+  deviceTrusts        DeviceTrust[]
+  playbackSessions    PlaybackSession[]
+  assetAccessLogs     AssetAccessLog[]
+  auditLogs           AuditLog[]           @relation("AuditActor")
+  coursesAuthored     Course[]             @relation("CourseAuthor")
+  favorites           Favorite[]
+
+  @@index([role, status])
+  @@index([createdAt])
+}
+
+model StudentProfile {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studentId      String   @unique @default(dbgenerated("gen_random_uuid()")) // public-facing ID e.g. MN-xxxx is derived in app
+  level          CourseLevel?
+  classNumber    Int? // 9, 10 (Dakhil), 11, 12 (Alim)
+  institution    String?
+  district       String?
+  bio            String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AdminProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  designation String?
+  phone       String?
+  note        String?
+  createdAt   DateTime @default(now())
+}
+
+/// A transparent, privacy-conscious device record: derived from the user
+/// agent class + platform, NOT from invasive fingerprinting.
+model DeviceTrust {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceKey   String // hash(userId + uaFamily + platform) — transparent device identity
+  label       String // human readable e.g. "Chrome on Android"
+  deviceType  DeviceType @default(OTHER)
+  os          String?
+  browser     String?
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  revokedAt   DateTime?
+
+  sessions   Session[]
+  playbacks  PlaybackSession[]
+
+  @@unique([userId, deviceKey])
+  @@index([userId, lastSeenAt])
+}
+
+enum DeviceType {
+  DESKTOP
+  MOBILE
+  TABLET
+  OTHER
+}
+
+model Session {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash     String    @unique // sha256 of the opaque session token; raw token lives only in the cookie
+  deviceId      String?
+  device        DeviceTrust? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  ip            String?
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+  lastActiveAt  DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  revokedReason String?
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+model LoginHistory {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String? // identifier attempted (before user resolution)
+  success   Boolean
+  reason    String // e.g. OK, BAD_PASSWORD, UNKNOWN_ACCOUNT, SUSPENDED, RATE_LIMITED
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([email, createdAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model VerificationCode {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel    VerificationChannel
+  purpose    VerificationPurpose
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, purpose, channel])
+}
+
+enum VerificationChannel {
+  EMAIL
+  SMS
+}
+
+enum VerificationPurpose {
+  ACCOUNT_VERIFICATION
+  LOGIN_OTP
+  PASSWORD_RESET
+}
+
+// ---------------------------------------------------------------------------
+// Catalog: categories, subjects, courses, modules, lessons, assets
+// ---------------------------------------------------------------------------
+
+enum CourseLevel {
+  DAKHIL
+  ALIM
+  GENERAL
+}
+
+model CourseCategory {
+  id          String      @id @default(uuid())
+  slug        String      @unique
+  nameBn      String
+  nameEn      String
+  level       CourseLevel
+  description String?
+  order       Int         @default(0)
+  isActive    Boolean     @default(true)
+
+  courses  Course[]
+  subjects Subject[]
+
+  @@index([level, order])
+}
+
+model Subject {
+  id          String      @id @default(uuid())
+  slug        String      @unique
+  nameBn      String
+  nameEn      String
+  level       CourseLevel
+  category    CourseCategory? @relation(fields: [categoryId], references: [id])
+  categoryId  String?
+  description String?
+  order       Int         @default(0)
+  isActive    Boolean     @default(true)
+
+  courses   Course[]
+  questions Question[]
+  exams     Exam[]
+
+  @@index([level, order])
+}
+
+model TeacherProfile {
+  id          String   @id @default(uuid())
+  userId      String?  @unique
+  nameBn      String
+  nameEn      String
+  designationBn String
+  designationEn String
+  bioBn       String?
+  bioEn       String?
+  education   String?
+  photoUrl    String?
+  accentColor String   @default("teal")
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  courses Course[]
+
+  @@index([isActive, order])
+}
+
+model Course {
+  id             String      @id @default(uuid())
+  slug           String      @unique
+  titleBn        String
+  titleEn        String
+  subtitleBn     String?
+  subtitleEn     String?
+  descriptionBn  String?
+  descriptionEn  String?
+  categoryId     String
+  category       CourseCategory @relation(fields: [categoryId], references: [id])
+  subjectId      String?
+  subject        Subject?    @relation(fields: [subjectId], references: [id])
+  instructorId   String?
+  instructor     TeacherProfile? @relation(fields: [instructorId], references: [id])
+  level          CourseLevel
+  classNumber    Int? // 9/10 Dakhil, 11/12 Alim
+  pricePaisa     Int         @default(0) // 0 = free
+  discountPaisa  Int? // discounted current price
+  discountEndsAt DateTime?
+  currency       String      @default("BDT")
+  status         CourseStatus @default(DRAFT)
+  enrollmentLimit Int? // null = unlimited
+  isFeatured     Boolean     @default(false)
+  hasCertificate Boolean     @default(false)
+  durationMinutes Int        @default(0)
+  thumbnailSeed  Int         @default(1) // picks the geometric cover pattern
+  language       String      @default("bn")
+  createdBy      String?
+  author         User?       @relation("CourseAuthor", fields: [createdBy], references: [id])
+  publishedAt    DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  modules        CourseModule[]
+  enrollments    Enrollment[]
+  payments       Payment[]
+  exams          Exam[]
+  announcements  Announcement[]
+  coupons        Coupon[]
+  favorites      Favorite[]
+
+  @@index([status, level, isFeatured])
+  @@index([categoryId])
+  @@index([subjectId])
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model CourseModule {
+  id          String   @id @default(uuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  titleBn     String
+  titleEn     String?
+  description String?
+  order       Int      @default(0)
+  isPublished Boolean  @default(true)
+
+  lessons Lesson[]
+  exams   Exam[]
+
+  @@unique([courseId, order])
+  @@index([courseId])
+}
+
+model Lesson {
+  id              String     @id @default(uuid())
+  moduleId        String
+  module          CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  titleBn         String
+  titleEn         String?
+  type            LessonType @default(VIDEO)
+  contentBn       String? // text lesson body / lecture notes shown under player
+  contentEn       String?
+  videoAssetId    String? @unique
+  videoAsset      VideoAsset?  @relation(fields: [videoAssetId], references: [id])
+  documentAssetId String? @unique
+  documentAsset   DocumentAsset? @relation(fields: [documentAssetId], references: [id])
+  durationSeconds Int        @default(0)
+  order           Int        @default(0)
+  isPreview       Boolean    @default(false) // free preview lesson
+  isPublished     Boolean    @default(true)
+
+  progress LessonProgress[]
+
+  @@unique([moduleId, order])
+  @@index([moduleId])
+}
+
+enum LessonType {
+  VIDEO
+  DOCUMENT
+  TEXT
+}
+
+model VideoAsset {
+  id              String     @id @default(uuid())
+  provider        VideoProvider @default(LOCAL_HLS)
+  storagePath     String // e.g. videos/<id>/master.m3u8 (relative to storage root)
+  posterPath      String?
+  durationSeconds Int        @default(0)
+  sizeBytes       Int        @default(0)
+  status          AssetStatus @default(PROCESSING)
+  createdAt       DateTime   @default(now())
+
+  lesson Lesson?
+  logs   AssetAccessLog[]
+
+  @@index([status])
+}
+
+model DocumentAsset {
+  id          String     @id @default(uuid())
+  storagePath String
+  pageCount   Int        @default(0)
+  sizeBytes   Int        @default(0)
+  status      AssetStatus @default(READY)
+  createdAt   DateTime   @default(now())
+
+  lesson Lesson?
+  logs   AssetAccessLog[]
+
+  @@index([status])
+}
+
+enum VideoProvider {
+  LOCAL_HLS
+  S3_SIGNED_CDN // production: signed CDN HLS
+  EXTERNAL_DRM  // Widevine/FairPlay-capable provider
+}
+
+enum AssetStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Enrollment, payments, coupons
+// ---------------------------------------------------------------------------
+
+enum EnrollmentStatus {
+  PENDING // awaiting payment verification / manual approval
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  REVOKED
+}
+
+model Enrollment {
+  id               String           @id @default(uuid())
+  userId           String
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId         String
+  course           Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  status           EnrollmentStatus @default(PENDING)
+  accessExpiresAt  DateTime?
+  grantedBy        String? // admin user id for manual grants
+  source           EnrollmentSource @default(PAYMENT)
+  lastActivityAt   DateTime         @default(now())
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  payments      Payment[]
+  progress      LessonProgress[]
+  certificates  Certificate[]
+
+  @@unique([userId, courseId])
+  @@index([courseId, status])
+  @@index([userId, status])
+}
+
+enum EnrollmentSource {
+  PAYMENT
+  MANUAL_GRANT
+  FREE_ENROLLMENT
+}
+
+model Payment {
+  id               String        @id @default(uuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId         String
+  course           Course        @relation(fields: [courseId], references: [id])
+  enrollmentId     String?
+  enrollment       Enrollment?   @relation(fields: [enrollmentId], references: [id])
+  amountPaisa      Int
+  discountPaisa    Int           @default(0)
+  currency         String        @default("BDT")
+  method           PaymentMethod
+  status           PaymentStatus @default(INITIATED)
+  gatewayRef       String? // gateway transaction id
+  gatewayPayload   Json? // last webhook / verification payload
+  senderNumber     String? // manual payments: bKash/Nagad sender
+  manualTxnId      String? // manual payments: TrxID entered by student
+  note             String?
+  couponId         String?
+  coupon           Coupon?       @relation(fields: [couponId], references: [id])
+  verifiedAt       DateTime?
+  verifiedBy       String? // admin id for manual approvals
+  refundedAt       DateTime?
+  refundAmountPaisa Int?
+  invoiceNo        String        @unique
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  events PaymentEvent[]
+  redemption CouponRedemption?
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@index([courseId])
+}
+
+enum PaymentMethod {
+  BKASH
+  NAGAD
+  SSLCOMMERZ
+  MANUAL
+  FREE
+}
+
+enum PaymentStatus {
+  INITIATED
+  PENDING_REVIEW // manual payment submitted, awaiting admin approval
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+model PaymentEvent {
+  id         String        @id @default(uuid())
+  paymentId  String
+  payment    Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  type       String // INITIATED | WEBHOOK_RECEIVED | VERIFIED | FAILED | REFUNDED | APPROVED ...
+  payload    Json?
+  signatureValid Boolean?
+  createdAt  DateTime      @default(now())
+
+  @@index([paymentId])
+}
+
+model Coupon {
+  id             String    @id @default(uuid())
+  code           String    @unique
+  type           CouponType
+  value          Int // percent (0-100) or paisa depending on type
+  minAmountPaisa Int       @default(0)
+  courseId       String?
+  course         Course?   @relation(fields: [courseId], references: [id])
+  maxRedemptions Int?
+  redeemedCount  Int       @default(0)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  isActive       Boolean   @default(true)
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+
+  redemptions CouponRedemption[]
+  payments    Payment[]
+
+  @@index([isActive, endsAt])
+}
+
+enum CouponType {
+  PERCENT
+  FIXED_PAISA // fixed paisa discount
+}
+
+model CouponRedemption {
+  id        String   @id @default(uuid())
+  couponId  String
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentId String? @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([couponId, userId, paymentId])
+  @@index([couponId, userId])
+}
+
+// ---------------------------------------------------------------------------
+// Learning: progress, playback, documents, exams
+// ---------------------------------------------------------------------------
+
+model LessonProgress {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId        String
+  lesson          Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  enrollmentId    String
+  enrollment      Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  positionSeconds Int      @default(0)
+  completedAt     DateTime?
+  lastViewedAt    DateTime @default(now())
+
+  @@unique([userId, lessonId])
+  @@index([enrollmentId, lastViewedAt])
+}
+
+model PlaybackSession {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId       String
+  deviceId       String?
+  device         DeviceTrust? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  appSessionId   String? // the UI Session this playback belongs to
+  tokenFingerprint String // hash of the playback token family
+  ip             String?
+  startedAt      DateTime  @default(now())
+  lastHeartbeatAt DateTime @default(now())
+  endedAt        DateTime?
+  revokedAt      DateTime?
+  revokedReason  String?
+
+  @@index([userId, revokedAt, lastHeartbeatAt])
+  @@index([lessonId])
+}
+
+model AssetAccessLog {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetType  AssetType
+  assetId    String
+  videoAssetId String?
+  videoAsset VideoAsset? @relation(fields: [videoAssetId], references: [id])
+  documentAssetId String?
+  documentAsset DocumentAsset? @relation(fields: [documentAssetId], references: [id])
+  action     String // TOKEN_ISSUED | PLAY_START | HEARTBEAT | PLAY_END | CONCURRENT_BLOCKED | DOC_OPEN | DENIED
+  ip         String?
+  appSessionId String?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([assetType, assetId])
+}
+
+enum AssetType {
+  VIDEO
+  DOCUMENT
+}
+
+// Exams -------------------------------------------------------------
+
+model Exam {
+  id               String     @id @default(uuid())
+  courseId         String?
+  course           Course?    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  moduleId         String?
+  module           CourseModule? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  subjectId        String?
+  subject          Subject?   @relation(fields: [subjectId], references: [id])
+  titleBn          String
+  titleEn          String?
+  description      String?
+  type             ExamType   @default(MCQ_PRACTICE)
+  chapterBn        String?
+  durationMinutes  Int        @default(15)
+  totalMarks       Int        @default(0) // computed by app when questions attached
+  passMarks        Int        @default(0)
+  negativePerWrong Float      @default(0) // marks deducted per wrong answer
+  shuffleQuestions Boolean    @default(true)
+  maxAttempts      Int        @default(3) // 0 = unlimited
+  isPublished      Boolean    @default(false)
+  availableFrom    DateTime?
+  availableTo      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  questions ExamQuestion[]
+  attempts  ExamAttempt[]
+
+  @@index([courseId, isPublished])
+  @@index([subjectId])
+}
+
+enum ExamType {
+  MCQ_PRACTICE
+  CHAPTER_TEST
+  MODEL_TEST
+}
+
+model Question {
+  id             String       @id @default(uuid())
+  subjectId      String?
+  subject        Subject?     @relation(fields: [subjectId], references: [id])
+  level          CourseLevel
+  chapterBn      String?
+  stemBn         String
+  stemEn         String?
+  optionsBn      Json // string[4]
+  correctIndex   Int
+  explanationBn  String?
+  difficulty     QuestionDifficulty @default(MEDIUM)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  examLinks ExamQuestion[]
+
+  @@index([subjectId, level, chapterBn])
+  @@index([difficulty])
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model ExamQuestion {
+  id       String   @id @default(uuid())
+  examId   String
+  exam     Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  questionId String
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  order    Int      @default(0)
+  marks    Int      @default(1)
+
+  @@unique([examId, questionId])
+  @@index([examId, order])
+}
+
+model ExamAttempt {
+  id            String      @id @default(uuid())
+  examId        String
+  exam          Exam        @relation(fields: [examId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attemptNumber Int
+  status        AttemptStatus @default(IN_PROGRESS)
+  startedAt     DateTime    @default(now())
+  submittedAt   DateTime?
+  expiresAt     DateTime // start + duration
+  score         Float?
+  totalMarks    Int
+  correctCount  Int         @default(0)
+  wrongCount    Int         @default(0)
+  skippedCount  Int         @default(0)
+  answers       Json // [{questionId, selected, correct, marks}]
+
+  @@unique([examId, userId, attemptNumber])
+  @@index([userId, submittedAt])
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+}
+
+model Certificate {
+  id           String   @id @default(uuid())
+  serial       String   @unique
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  issuedAt     DateTime @default(now())
+  issuedBy     String?
+
+  @@index([enrollmentId])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications, content management, settings, audit
+// ---------------------------------------------------------------------------
+
+enum NotificationType {
+  ENROLLMENT
+  PAYMENT
+  LESSON_ANNOUNCEMENT
+  COURSE_UPDATE
+  EXAM_REMINDER
+  SECURITY_ALERT
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  titleBn   String
+  bodyBn    String
+  linkUrl   String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt, createdAt])
+}
+
+model Announcement {
+  id          String   @id @default(uuid())
+  courseId    String?
+  course      Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  titleBn     String
+  bodyBn      String
+  isPublished Boolean  @default(true)
+  createdBy   String?
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([courseId, publishedAt])
+}
+
+model Testimonial {
+  id          String   @id @default(uuid())
+  nameBn      String
+  nameEn      String
+  roleBn      String // e.g. "দাখিল ২০২৪, ঢাকা"
+  quoteBn     String
+  rating      Int      @default(5)
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+}
+
+model Faq {
+  id        String  @id @default(uuid())
+  questionBn String
+  answerBn  String
+  questionEn String?
+  answerEn  String?
+  category  String  @default("general")
+  order     Int     @default(0)
+  isActive  Boolean @default(true)
+}
+
+model Banner {
+  id        String   @id @default(uuid())
+  placement String   @default("HOME_HERO")
+  titleBn   String
+  subtitleBn String?
+  ctaLabelBn String?
+  ctaHref   String?
+  isActive  Boolean  @default(true)
+  order     Int      @default(0)
+}
+
+model ContactMessage {
+  id        String        @id @default(uuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String
+  status    ContactStatus @default(NEW)
+  createdAt DateTime      @default(now())
+
+  @@index([status, createdAt])
+}
+
+enum ContactStatus {
+  NEW
+  READ
+  REPLIED
+}
+
+model SiteSettings {
+  key       String   @id
+  value     Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorRole  String?
+  action     String // e.g. STUDENT_SUSPENDED, COURSE_PUBLISHED, PAYMENT_APPROVED, SESSION_REVOKED
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  ip         String?
+  prevHash   String? // hash-chain: hash(prevHash + record) → tamper-evident
+  hash       String?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
+}
+
+model Favorite {
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId  String
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, courseId])
+}
