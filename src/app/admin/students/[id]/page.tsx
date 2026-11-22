@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
+
 import { hasPermission } from "@/lib/auth/rbac";
 import { Badge, ButtonLink, Card } from "@/components/ui";
 import { bnDigits, formatDateTimeBn, formatTaka, relativeTimeBn } from "@/lib/format";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function StudentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   requirePagePermission(ctx, "students.view");
   const canManage = hasPermission(ctx, "students.manage");
 

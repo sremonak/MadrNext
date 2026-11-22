@@ -1,14 +1,14 @@
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
 import { assertCourseAccess } from "@/lib/access";
 import { ExamRunner } from "./exam-runner";
 import { notFound, redirect } from "next/navigation";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function ExamPage({ params }: { params: Promise<{ examId: string }> }) {
   const { examId } = await params;
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
 
   const exam = await prisma.exam.findUnique({
     where: { id: examId },

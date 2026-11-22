@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { newOpaqueToken, sha256 } from "@/lib/auth/password";
@@ -137,6 +138,20 @@ export async function getAuthContext(): Promise<AuthContext | null> {
     sessionId: session.id,
     deviceLabel: session.device?.label ?? "অজানা ডিভাইস",
   };
+}
+
+/**
+ * Authenticated-page guard: layouts and pages render concurrently in the App
+ * Router, so a layout redirect alone cannot stop a page from rendering.
+ * Every protected page calls this first — anonymous visitors go to /login
+ * (with a return path) instead of crashing on a null context.
+ */
+export async function requireAuth(returnTo?: string): Promise<AuthContext> {
+  const ctx = await getAuthContext();
+  if (!ctx) {
+    redirect(returnTo ? `/login?next=${encodeURIComponent(returnTo)}` : "/login");
+  }
+  return ctx;
 }
 
 export async function destroyCurrentSession(reason = "LOGOUT"): Promise<void> {

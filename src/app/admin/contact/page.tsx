@@ -3,13 +3,13 @@ import { Badge, Card } from "@/components/ui";
 import { bnDigits, formatDateTimeBn } from "@/lib/format";
 import { ContactRowActions } from "./contact-actions";
 import { requirePagePermission } from "@/lib/auth/rbac";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "যোগাযোগ বার্তা" };
 
 export default async function AdminContactPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   requirePagePermission(ctx, "contact.view");
   const messages = await prisma.contactMessage.findMany({ orderBy: [{ status: "asc" }, { createdAt: "desc" }], take: 50 });
 

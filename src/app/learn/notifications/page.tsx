@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
 import { Badge } from "@/components/ui";
 import { relativeTimeBn } from "@/lib/format";
 import { markAllReadAction } from "@/lib/actions/notifications";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "নোটিফিকেশন" };
@@ -19,7 +19,7 @@ const TYPE_LABEL: Record<string, { label: string; tone: "info" | "success" | "wa
 };
 
 export default async function NotificationsPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   const notifications = await prisma.notification.findMany({
     where: { userId: ctx.user.id },
     orderBy: { createdAt: "desc" },

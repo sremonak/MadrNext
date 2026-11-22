@@ -2,7 +2,8 @@ import { prisma } from "@/lib/db";
 import { Badge, Card, Pagination } from "@/components/ui";
 import { bnDigits, formatDateTimeBn, formatTaka } from "@/lib/format";
 import { PaymentRowActions } from "./payment-actions";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
+
 import { hasPermission } from "@/lib/auth/rbac";
 import { requirePagePermission } from "@/lib/auth/rbac";
 
@@ -18,7 +19,7 @@ export default async function AdminPaymentsPage({
 }) {
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   requirePagePermission(ctx, "payments.view");
   const canApprove = hasPermission(ctx, "payments.approve");
   const canRefund = hasPermission(ctx, "payments.refund");

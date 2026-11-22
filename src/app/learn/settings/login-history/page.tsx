@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
 import { Badge, Card } from "@/components/ui";
 import { formatDateTimeBn } from "@/lib/format";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "লগইন ইতিহাস" };
@@ -15,7 +15,7 @@ const REASON_BN: Record<string, string> = {
 };
 
 export default async function LoginHistoryPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   const history = await prisma.loginHistory.findMany({
     where: { userId: ctx.user.id },
     orderBy: { createdAt: "desc" },

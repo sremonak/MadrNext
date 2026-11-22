@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
+
 import { hasPermission } from "@/lib/auth/rbac";
 import { ButtonLink, Card } from "@/components/ui";
 import { bnDigits } from "@/lib/format";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminCourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   requirePagePermission(ctx, "courses.view");
   if (!hasPermission(ctx, "courses.manage")) {
     return <Card className="p-6 text-[14px] text-muted">কোর্স সম্পাদনার অনুমতি নেই।</Card>;

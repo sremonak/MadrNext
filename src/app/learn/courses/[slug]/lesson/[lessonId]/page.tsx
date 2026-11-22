@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ArrowRight, CheckCircle2, FileText, Video, BookOpen } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
 import { assertCourseAccess } from "@/lib/access";
+import { requireAuth } from "@/lib/auth/session";
 import { SecureVideoPlayer } from "@/components/learn/SecureVideoPlayer";
 import { SecurePdfViewer } from "@/components/learn/SecurePdfViewer";
 import { Badge, Button, Card } from "@/components/ui";
@@ -17,7 +17,7 @@ export default async function LessonPage({
   params: Promise<{ slug: string; lessonId: string }>;
 }) {
   const { slug, lessonId } = await params;
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
 
   const course = await prisma.course.findUnique({
     where: { slug },
@@ -49,7 +49,7 @@ export default async function LessonPage({
 
   async function markComplete() {
     "use server";
-    const ctx = (await getAuthContext())!;
+    const ctx = await requireAuth();
     const p = await prisma.lesson.findUnique({
       where: { id: lessonId },
       select: { moduleId: true, module: { select: { courseId: true } } },

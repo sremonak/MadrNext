@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { CheckCircle2, FileText, Video, BookOpen } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
 import { assertCourseAccess } from "@/lib/access";
+import { requireAuth } from "@/lib/auth/session";
 import { ButtonLink, Card } from "@/components/ui";
 import { bnDigits } from "@/lib/format";
 
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function LearnCoursePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   const course = await prisma.course.findUnique({
     where: { slug },
     include: {

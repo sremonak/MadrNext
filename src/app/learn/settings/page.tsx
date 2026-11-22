@@ -1,15 +1,15 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
 import { Badge, Card } from "@/components/ui";
 import { SettingsProfileForm } from "./settings-forms";
 import { formatDateBn } from "@/lib/format";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "সেটিংস" };
 
 export default async function SettingsPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   const user = await prisma.user.findUnique({
     where: { id: ctx.user.id },
     include: { studentProfile: true },

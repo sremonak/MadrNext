@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
 import { Badge, Card } from "@/components/ui";
 import { formatDateTimeBn, relativeTimeBn } from "@/lib/format";
 import { DeviceList } from "./device-list";
 import { logoutAllAction } from "@/lib/actions/auth";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "ডিভাইস ও সেশন" };
 
 export default async function DevicesPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   const [sessions, history] = await Promise.all([
     prisma.session.findMany({
       where: { userId: ctx.user.id },

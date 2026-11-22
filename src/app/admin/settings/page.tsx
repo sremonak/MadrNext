@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
+
 import { Card } from "@/components/ui";
 import { SettingsForm } from "./settings-form";
 import { env } from "@/lib/env";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "সাইট সেটিংস" };
 
 export default async function AdminSettingsPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   requirePagePermission(ctx, "settings.view");
   const rows = await prisma.siteSettings.findMany();
   const values: Record<string, string> = {};

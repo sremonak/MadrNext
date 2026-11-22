@@ -3,7 +3,7 @@ import { Badge, Card } from "@/components/ui";
 import { bnDigits, relativeTimeBn } from "@/lib/format";
 import { SessionRowActions } from "./session-actions";
 import { requirePagePermission } from "@/lib/auth/rbac";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "সেশন ও ডিভাইস" };
@@ -16,7 +16,7 @@ export default async function AdminSessionsPage({
   searchParams: Promise<{ page?: string; q?: string }>;
 }) {
   const sp = await searchParams;
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   requirePagePermission(ctx, "sessions.view");
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
 

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Badge, Card } from "@/components/ui";
 import { bnDigits, formatTaka } from "@/lib/format";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
+
 import { hasPermission } from "@/lib/auth/rbac";
 import { CreateCourseForm } from "./course-form";
 import { requirePagePermission } from "@/lib/auth/rbac";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "কোর্স ব্যবস্থাপনা" };
 
 export default async function AdminCoursesPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   requirePagePermission(ctx, "courses.view");
   const canManage = hasPermission(ctx, "courses.manage");
 

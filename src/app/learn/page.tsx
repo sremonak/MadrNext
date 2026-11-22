@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { ArrowRight, BookOpen, Megaphone, PlayCircle } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
 import { Badge, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { CourseCover } from "@/components/course/CourseCover";
 import { bnDigits, relativeTimeBn } from "@/lib/format";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "ড্যাশবোর্ড" };
 
 export default async function LearnDashboardPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   const userId = ctx.user.id;
 
   const enrollments = await prisma.enrollment.findMany({

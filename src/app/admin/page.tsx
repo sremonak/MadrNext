@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
+
 import { Badge, Card } from "@/components/ui";
 import { bnDigits, formatTaka, relativeTimeBn } from "@/lib/format";
 import { AdminBarChart, AdminDonut } from "@/components/admin/Charts";
@@ -13,7 +14,7 @@ export default async function AdminOverviewPage({
 }: {
   searchParams: Promise<{ denied?: string }>;
 }) {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   const { denied } = await searchParams;
 
   const [

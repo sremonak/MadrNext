@@ -3,13 +3,13 @@ import { Badge, Card } from "@/components/ui";
 import { bnDigits, relativeTimeBn } from "@/lib/format";
 import { ContentForms } from "./content-forms";
 import { requirePagePermission } from "@/lib/auth/rbac";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "কনটেন্ট ব্যবস্থাপনা" };
 
 export default async function AdminContentPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   requirePagePermission(ctx, "content.view");
   const [faqs, testimonials, announcements, courses] = await Promise.all([
     prisma.faq.findMany({ orderBy: { order: "asc" } }),

@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
 import { Badge, Card, EmptyState } from "@/components/ui";
 import { bnDigits, formatDateTimeBn, formatTaka } from "@/lib/format";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "পেমেন্ট ইতিহাস" };
 
 export default async function BillingPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   const payments = await prisma.payment.findMany({
     where: { userId: ctx.user.id },
     orderBy: { createdAt: "desc" },

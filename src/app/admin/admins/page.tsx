@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
+
 import { Badge, Card } from "@/components/ui";
 import { formatDateBn, relativeTimeBn } from "@/lib/format";
 import { AdminCreateForm, AdminRoleSelect } from "./admin-forms";
@@ -17,7 +18,7 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export default async function AdminsPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   requireSuperAdminPage(ctx);
   if (ctx.user.role !== "SUPER_ADMIN") {
     return <Card className="p-6 text-[14px] text-muted">শুধু Super Admin এই পেজ দেখতে পারেন।</Card>;

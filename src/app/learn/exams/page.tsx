@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { getAuthContext } from "@/lib/auth/session";
 import { Badge, Card, EmptyState } from "@/components/ui";
 import { bnDigits, formatDateTimeBn } from "@/lib/format";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "পরীক্ষা" };
 
 export default async function ExamsPage() {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   const enrollments = await prisma.enrollment.findMany({
     where: { userId: ctx.user.id, status: "ACTIVE" },
     select: { courseId: true },

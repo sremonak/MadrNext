@@ -3,7 +3,7 @@ import { Badge, Card, Pagination } from "@/components/ui";
 import { bnDigits, formatDateTimeBn } from "@/lib/format";
 import { verifyAuditChain } from "@/lib/audit";
 import { requirePagePermission } from "@/lib/auth/rbac";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "অডিট লগ" };
@@ -42,7 +42,7 @@ export default async function AdminAuditPage({
 }: {
   searchParams: Promise<{ page?: string; action?: string }>;
 }) {
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   requirePagePermission(ctx, "audit.view");
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);

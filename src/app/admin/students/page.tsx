@@ -4,7 +4,7 @@ import { Badge, Pagination, Card } from "@/components/ui";
 import { bnDigits, formatDateBn } from "@/lib/format";
 import { SearchInput } from "./search-input";
 import { requirePagePermission } from "@/lib/auth/rbac";
-import { getAuthContext } from "@/lib/auth/session";
+import { requireAuth } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "শিক্ষার্থী ব্যবস্থাপনা" };
@@ -17,7 +17,7 @@ export default async function StudentsPage({
   searchParams: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
   const sp = await searchParams;
-  const ctx = (await getAuthContext())!;
+  const ctx = await requireAuth();
   requirePagePermission(ctx, "students.view");
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
   const where = {
